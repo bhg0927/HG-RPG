@@ -69,6 +69,12 @@
   let lastRoundLoser = null;
   let usedKeyboard = false;
   let lastHeardAt = 0;
+  // 연결 상태: 잠깐 끊겨도 바로 끝내지 않고 일시정지 후 재연결을 기다린다
+  let netUnstable = false;
+  let unstableSince = 0;
+  let netPaused = false; // 연결 문제로 멈춘 상태 (사람이 누른 일시정지와 구분)
+  let kicked = false;
+  let opponentAway = false; // 상대가 다른 앱을 보는 중
   let lastPingAt = 0;
   let muted = false;
 
@@ -259,11 +265,16 @@
   function onNet(msg) {
     const o = opp();
     lastHeardAt = performance.now();
+    if (msg.t !== 'away') opponentAway = false;
+    if (netUnstable) leaveUnstable();
     switch (msg.t) {
       case 'ping':
         break;
+      case 'away':
+        opponentAway = true;
+        break;
       case 'bye':
-        onDisconnect();
+        onDisconnect(true);
         break;
       case 'hello':
       case 'diff':
@@ -295,7 +306,9 @@
         }
         break;
       case 'pause':
-        setPaused(msg.on, false);
+        if (msg.on && msg.net) netPause('상대 쪽 연결이 불안정해요');
+        else if (!msg.on && netPaused) resumeAfterNet();
+        else setPaused(msg.on, false);
         break;
       case 'lobby':
         if (state !== 'title') goLobby(false);
@@ -303,19 +316,21 @@
     }
   }
 
-  function onDisconnect() {
+  function onDisconnect(left = false) {
     if (!link) return;
     const l = link;
     link = null;
     l.close();
+    resetNetState();
     keepAwake(false);
     mode = 'local';
     players.forEach((p) => (p.local = true));
     layout();
     state = 'title';
     showOverlay(`
-      <h2>🔌 연결이 끊겼어요</h2>
-      <p>상대 화면이 꺼졌거나 인터넷이 끊겼을 수 있어요.<br>방을 다시 만들어 연결해 주세요.</p>
+      ${left
+        ? '<h2>👋 상대가 게임을 나갔어요</h2><p>다시 하려면 방을 새로 만들어 주세요.</p>'
+        : '<h2>🔌 연결이 끊겼어요</h2><p>한참 기다렸지만 다시 연결되지 않았어요.<br>방을 다시 만들어 연결해 주세요.</p>'}
       <button class="btn" data-action="title">처음으로</button>
     `);
   }
@@ -331,8 +346,11 @@
       p.view = null;
     });
     lastHeardAt = performance.now();
+    resetNetState();
     link.onmessage = onNet;
-    link.onclose = onDisconnect;
+    link.ondown = () => {
+      if (!netUnstable) enterUnstable(performance.now());
+    };
     send({ t: 'hello', difficulty: me().difficulty });
     layout();
     const q = new URLSearchParams(location.search);
@@ -342,6 +360,56 @@
       history.replaceState(null, '', location.pathname + (s ? `?${s}` : ''));
     }
     showLobby();
+  }
+
+  // ---------- 연결 불안정 / 재연결 ----------
+  const netBanner = document.getElementById('net-banner');
+
+  function resetNetState() {
+    netUnstable = false;
+    netPaused = false;
+    kicked = false;
+    opponentAway = false;
+    netBanner.classList.add('hidden');
+  }
+
+  function netPause(reason) {
+    if (state !== 'playing' && state !== 'countdown' && !(state === 'paused' && netPaused)) return;
+    state = 'paused';
+    netPaused = true;
+    showOverlay(`
+      <h2>📶 잠깐만요</h2>
+      <p>${reason}<br>다시 연결되면 3초 뒤에 이어서 해요.</p>
+      <p class="small" id="net-wait"></p>
+      <button class="btn ghost" data-action="title">그만하기</button>
+    `);
+  }
+
+  function enterUnstable(t) {
+    netUnstable = true;
+    unstableSince = t;
+    kicked = false;
+    if (state === 'playing' || state === 'countdown') {
+      netPause('연결이 불안정해서 둘 다 잠깐 멈췄어요.');
+      send({ t: 'pause', on: true, net: true });
+    }
+  }
+
+  function leaveUnstable() {
+    netUnstable = false;
+    netBanner.classList.add('hidden');
+    if (netPaused && state === 'paused') {
+      send({ t: 'pause', on: false, net: true });
+      resumeAfterNet();
+    }
+  }
+
+  function resumeAfterNet() {
+    netPaused = false;
+    if (state !== 'paused') return;
+    state = 'countdown';
+    countdownLeft = CFG.countdown;
+    showCountdown(3);
   }
 
   function startHost() {
@@ -554,6 +622,7 @@
         <button class="btn ghost" data-action="${mode === 'online' ? 'lobby' : 'title'}">그만하기</button>
       `);
     } else if (!on && state === 'paused') {
+      if (netPaused) return; // 연결 문제로 멈춘 건 다시 연결돼야 풀린다
       state = 'playing';
       hideOverlay();
     } else {
@@ -583,9 +652,12 @@
 
   function showTitle(error = '') {
     if (link) {
-      link.close();
+      const l = link;
       link = null;
+      l.send({ t: 'bye' });
+      setTimeout(() => l.close(), 300);
     }
+    resetNetState();
     mode = 'local';
     players.forEach((p) => {
       p.local = true;
@@ -824,7 +896,10 @@
 
   // 다른 앱으로 넘어가면 자동 일시정지 (온라인이면 상대도 같이 멈춤)
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden) setPaused(true);
+    if (document.hidden) {
+      setPaused(true);
+      send({ t: 'away' });
+    }
     else {
       lastHeardAt = performance.now(); // 백그라운드에 있던 시간은 끊김으로 치지 않는다
       if (state === 'playing' || state === 'countdown') keepAwake(true);
@@ -921,16 +996,44 @@
     send({ t: 'view', v: JSON.parse(json) });
   }
 
-  // 상대 폰이 갑자기 꺼져도 알아챌 수 있게 1초마다 신호를 주고받는다.
-  // 상대가 다른 앱으로 넘어간 경우(일시정지 상태)는 여유를 길게 준다.
+  // 1초마다 신호를 주고받아 연결 상태를 확인한다.
+  //  - 3초 넘게 소식이 없으면: 게임 중이면 둘 다 일시정지하고 재연결을 기다린다
+  //  - 90초 넘게 안 돌아오면: 연결 끊김으로 처리 (상대가 다른 앱을 보는 중이면 10분)
+  const UNSTABLE_AFTER = 3000;
+  const GIVE_UP_AFTER = 90000;
+  const AWAY_GIVE_UP_AFTER = 600000;
   function heartbeat(t) {
     if (mode !== 'online' || !link) return;
     if (t - lastPingAt > 1000) {
       lastPingAt = t;
       send({ t: 'ping' });
     }
-    const limit = state === 'playing' || state === 'countdown' ? 8000 : 30000;
-    if (t - lastHeardAt > limit) onDisconnect();
+    const silent = t - lastHeardAt;
+    if (opponentAway) {
+      showBanner('🙈 상대가 잠깐 다른 앱을 보고 있어요');
+      if (silent > AWAY_GIVE_UP_AFTER) onDisconnect();
+      return;
+    }
+    if (!netUnstable && (silent > UNSTABLE_AFTER || !link.up)) enterUnstable(t);
+    if (!netUnstable) {
+      netBanner.classList.add('hidden');
+      return;
+    }
+    const waited = Math.floor((t - unstableSince) / 1000);
+    showBanner(`📶 연결이 불안정해요… 다시 연결하는 중 (${waited}초)`);
+    const waitEl = document.getElementById('net-wait');
+    if (waitEl) waitEl.textContent = `기다린 시간 ${waited}초`;
+    // 연결은 살아 있다고 나오는데 응답이 없으면 새로 연결해 본다
+    if (!kicked && link.up && t - unstableSince > 6000) {
+      kicked = true;
+      link.kick();
+    }
+    if (t - unstableSince > GIVE_UP_AFTER) onDisconnect();
+  }
+
+  function showBanner(text) {
+    if (netBanner.textContent !== text) netBanner.textContent = text;
+    netBanner.classList.remove('hidden');
   }
   window.addEventListener('pagehide', () => send({ t: 'bye' }));
 
@@ -976,5 +1079,6 @@
     get state() { return state; },
     get mode() { return mode; },
     get myIdx() { return myIdx; },
+    get link() { return link; },
   };
 })();

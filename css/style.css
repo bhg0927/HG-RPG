@@ -402,3 +402,22 @@ body.online .help { display: none; }
 .sel-box.over .sel-sum { background: var(--danger); }
 .player.mini .sel-box { border-width: 1.5px; border-radius: 4px; }
 .player.mini .sel-sum { display: none; }
+
+/* ---------- 연결 상태 알림 ---------- */
+.net-banner {
+  position: fixed;
+  left: 50%;
+  top: max(8px, env(safe-area-inset-top));
+  transform: translateX(-50%);
+  z-index: 20;
+  background: #5b4a42;
+  color: #fff;
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-size: 14px;
+  white-space: nowrap;
+  max-width: calc(100vw - 32px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.net-banner.hidden { display: none; }
