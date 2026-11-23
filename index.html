@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>풍선 숫자 대전</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Jua&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div id="app">
+    <header class="topbar">
+      <h1>🎈 풍선 숫자 대전</h1>
+      <div class="topbar-right">
+        <span class="hint">Esc 일시정지 · M 소리</span>
+      </div>
+    </header>
+
+    <main class="arena">
+      <section class="player p1" id="player-0"></section>
+      <div class="vs">VS</div>
+      <section class="player p2" id="player-1"></section>
+    </main>
+
+    <footer class="help">
+      이어진 숫자를 골라 <b>합 10</b>을 만들면 지워져요. 3칸 이상 한 번에 지우거나 연속으로 지우면 상대 판에 <b>🎈 풍선</b>이 올라갑니다.
+    </footer>
+  </div>
+
+  <div id="overlay" class="overlay">
+    <div class="overlay-card" id="overlay-card"></div>
+  </div>
+
+  <script src="js/board.js"></script>
+  <script src="js/game.js"></script>
+</body>
+</html>

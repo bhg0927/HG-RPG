@@ -1,0 +1,9 @@
+{
+  "name": "balloon-number-battle",
+  "version": "0.1.0",
+  "private": true,
+  "description": "둘이서 하는 아기자기한 숫자 퍼즐 대전 게임",
+  "scripts": {
+    "test": "node --test"
+  }
+}
