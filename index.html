@@ -2,8 +2,13 @@
 <html lang="ko">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#fff7f0">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="풍선 숫자 대전">
   <title>풍선 숫자 대전</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎈</text></svg>">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Jua&display=swap" rel="stylesheet">
@@ -15,6 +20,8 @@
       <h1>🎈 풍선 숫자 대전</h1>
       <div class="topbar-right">
         <span class="hint">Esc 일시정지 · M 소리</span>
+        <button class="icon-btn" id="btn-mute" aria-label="소리 켜기/끄기">🔊</button>
+        <button class="icon-btn" id="btn-pause" aria-label="일시정지">⏸</button>
       </div>
     </header>
 
@@ -33,7 +40,9 @@
     <div class="overlay-card" id="overlay-card"></div>
   </div>
 
+  <script src="js/vendor/peerjs-1.5.4.min.js"></script>
   <script src="js/board.js"></script>
+  <script src="js/net.js"></script>
   <script src="js/game.js"></script>
 </body>
 </html>
