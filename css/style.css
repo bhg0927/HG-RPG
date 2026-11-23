@@ -171,10 +171,9 @@ body {
   font-size: calc(var(--cell) * 0.6);
 }
 .cell.chain {
-  transform: scale(0.88);
-  box-shadow: 0 0 0 3px var(--me) inset;
-  color: #fff;
-  background: var(--me);
+  transform: scale(0.9);
+  box-shadow: 0 0 0 2px #fff inset;
+  font-weight: bold;
 }
 .cell.cursor { box-shadow: 0 0 0 3px var(--me), 0 0 0 6px #fff; z-index: 1; }
 .cell.cursor.chain { box-shadow: 0 0 0 3px #fff inset, 0 0 0 3px var(--me); }
@@ -375,3 +374,31 @@ body.online .help { display: none; }
   .keys { display: none; }
 }
 .join-row input::placeholder { letter-spacing: 0; font-size: 16px; color: #c9b8ae; }
+
+/* ---------- 사각형 선택 ---------- */
+.sel-box {
+  display: none;
+  position: absolute;
+  border: 3px dashed var(--me);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--me) 12%, transparent);
+  pointer-events: none;
+  z-index: 2;
+}
+.sel-box.ok { border-style: solid; border-color: #3fb68b; background: rgba(63, 182, 139, 0.18); }
+.sel-box.over { border-color: var(--danger); background: rgba(255, 107, 107, 0.12); }
+.sel-sum {
+  position: absolute;
+  top: -30px; right: -6px;
+  min-width: 28px; height: 26px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--me);
+  color: #fff;
+  font-size: 16px;
+  display: grid; place-items: center;
+}
+.sel-box.ok .sel-sum { background: #3fb68b; }
+.sel-box.over .sel-sum { background: var(--danger); }
+.player.mini .sel-box { border-width: 1.5px; border-radius: 4px; }
+.player.mini .sel-sum { display: none; }

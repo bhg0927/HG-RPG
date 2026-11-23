@@ -12,9 +12,9 @@
 
   // ---------- 밸런스 설정 ----------
   const DIFFICULTY = {
-    easy: { label: '쉬움', rise: 11000 },
-    normal: { label: '보통', rise: 8500 },
-    hard: { label: '어려움', rise: 6500 },
+    easy: { label: '쉬움', rise: 13000 },
+    normal: { label: '보통', rise: 10000 },
+    hard: { label: '어려움', rise: 7500 },
   };
   const CFG = {
     startRows: 5,
@@ -143,6 +143,7 @@
       </div>
       <div class="board-wrap">
         <div class="grid"></div>
+        <div class="sel-box"><span class="sel-sum"></span></div>
         <div class="fx"></div>
         <div class="danger-banner">위험!</div>
       </div>
@@ -167,6 +168,8 @@
       root, grid, cells,
       wrap: root.querySelector('.board-wrap'),
       fx: root.querySelector('.fx'),
+      selBox: root.querySelector('.sel-box'),
+      selSum: root.querySelector('.sel-sum'),
       wins: root.querySelector('.wins'),
       pname: root.querySelector('.pname'),
       incomingBalloons: root.querySelector('.incoming-balloons'),
@@ -398,10 +401,7 @@
     const first = p.pending[0];
     return {
       cols: b.cols.map((col) => col.map((x) => (x.balloon ? -x.n : x.n))),
-      chain: b.chain.map((cell) => {
-        const q = b.posOf(cell);
-        return q ? [q.c, q.r] : [-1, -1];
-      }),
+      rect: b.rect ? [b.rect.c0, b.rect.r0, b.rect.c1, b.rect.r1] : null,
       cursor: [b.cursor.c, b.cursor.r],
       sum: b.sum,
       incoming: total,
@@ -492,14 +492,14 @@
   function handleBoardEvent(p, ev) {
     switch (ev.type) {
       case 'start': sfx('pick'); break;
-      case 'extend': case 'undo': sfx('step'); break;
+      case 'extend': sfx('step'); break;
       case 'invalid': shake(p); break;
       case 'over': {
         shake(p);
         sfx('over');
         vibrate(40);
         const last = ev.cells[ev.cells.length - 1];
-        fxText(p, `${ev.sum}! 넘쳤어요`, 'bad', cellCenter(p, last.c, last.r));
+        fxText(p, `${ev.sum}! 10보다 커요`, 'bad', cellCenter(p, last.c, last.r));
         break;
       }
       case 'clear': {
@@ -597,7 +597,7 @@
     keepAwake(false);
     showOverlay(`
       <h2>🎈 풍선 숫자 대전</h2>
-      <p>붙어 있는 숫자를 손가락으로 이어서 <b>합 10</b>을 만드세요.<br>
+      <p>손가락으로 <b>네모를 그려서</b> 안의 숫자 합이 <b>10</b>이 되면 지워져요.<br>
       3칸 이상 지우거나 연속으로 지우면 상대 판에 풍선이 올라가요.</p>
       ${error ? `<p class="error">${error}</p>` : ''}
       <div class="menu">
@@ -685,23 +685,17 @@
     if (e.target.id === 'code-input' && e.key === 'Enter') startJoin(e.target.value.trim());
   });
 
-  // ---------- 입력: 터치 (손가락으로 이어 긋기) ----------
-  function cellFromPoint(p, x, y, strict) {
+  // ---------- 입력: 터치 (사각형 드래그) ----------
+  /** 화면 좌표 → 칸. 판 밖이면 가장 가까운 칸으로 붙인다 (clamp=false면 판 밖은 null) */
+  function cellFromPoint(p, x, y, clamp) {
     const first = p.dom.cells[ROWS - 1][0].getBoundingClientRect();
     const second = p.dom.cells[ROWS - 1][1].getBoundingClientRect();
     const step = second.left - first.left;
-    const size = first.width;
-    const fx = (x - first.left) / step;
-    const fy = (y - first.top) / step;
-    const c = Math.floor(fx);
-    const row = Math.floor(fy);
-    if (c < 0 || c >= COLS || row < 0 || row >= ROWS) return null;
-    if (strict) {
-      // 칸 가장자리에서는 반응하지 않아야 대각선으로 그을 때 덜 헷갈린다
-      const ox = ((fx - c) * step) / size;
-      const oy = ((fy - row) * step) / size;
-      if (ox < 0.15 || ox > 0.85 || oy < 0.15 || oy > 0.85) return null;
-    }
+    let c = Math.floor((x - first.left) / step);
+    let row = Math.floor((y - first.top) / step);
+    if (!clamp && (c < 0 || c >= COLS || row < 0 || row >= ROWS)) return null;
+    c = Math.max(0, Math.min(COLS - 1, c));
+    row = Math.max(0, Math.min(ROWS - 1, row));
     return { c, r: ROWS - 1 - row };
   }
 
@@ -714,35 +708,24 @@
       e.preventDefault();
       try { grid.setPointerCapture(e.pointerId); } catch (err) { /* 무시 */ }
       p.drag = { id: e.pointerId };
-      const b = p.board;
-      b.chain = [];
-      b.cursor = { c: pos.c, r: pos.r };
-      handleBoardEvent(p, b.pick());
+      handleBoardEvent(p, p.board.startSelect(pos.c, pos.r));
     });
     grid.addEventListener('pointermove', (e) => {
       if (!p.drag || p.drag.id !== e.pointerId || state !== 'playing') return;
       const pos = cellFromPoint(p, e.clientX, e.clientY, true);
-      if (!pos) return;
-      const b = p.board;
-      // 손가락이 빨리 움직여 칸을 건너뛰면 한 칸씩 따라간다
-      for (let guard = 0; guard < 12 && b.chain.length; guard++) {
-        const last = b.posOf(b.chain[b.chain.length - 1]);
-        if (!last) break;
-        const dc = pos.c - last.c;
-        const dr = pos.r - last.r;
-        if (!dc && !dr) break;
-        const ev = Math.abs(dc) >= Math.abs(dr) ? b.moveCursor(Math.sign(dc), 0) : b.moveCursor(0, Math.sign(dr));
-        handleBoardEvent(p, ev);
-        if (ev.type === 'blocked' || ev.type === 'clear' || ev.type === 'over') break;
-      }
+      handleBoardEvent(p, p.board.setCursor(pos.c, pos.r));
     });
-    const end = (e) => {
+    // 손을 떼면 합을 확인: 10이면 지워지고, 아니면 취소
+    grid.addEventListener('pointerup', (e) => {
       if (!p.drag || p.drag.id !== e.pointerId) return;
       p.drag = null;
-      if (p.board && p.board.chain.length) p.board.chain = []; // 손을 떼면 취소
-    };
-    grid.addEventListener('pointerup', end);
-    grid.addEventListener('pointercancel', end);
+      if (state === 'playing' && p.board.selecting) handleBoardEvent(p, p.board.confirm());
+    });
+    grid.addEventListener('pointercancel', (e) => {
+      if (!p.drag || p.drag.id !== e.pointerId) return;
+      p.drag = null;
+      if (p.board) p.board.cancel();
+    });
   }
 
   // ---------- 입력: 키보드 / 게임패드 ----------
@@ -855,7 +838,8 @@
     dom.wins.textContent = '❤️'.repeat(Math.max(0, p.wins)) + '🤍'.repeat(Math.max(0, CFG.winRounds - p.wins));
     dom.pname.textContent = mode === 'online' && p.local ? `${p.def.name} (나)` : p.def.name;
 
-    const chainKeys = new Set(v ? v.chain.map(([c, r]) => `${c},${r}`) : []);
+    const rect = v && v.rect;
+    const inRect = (c, r) => rect && c >= rect[0] && c <= rect[2] && r >= rect[1] && r <= rect[3];
     const showCursor = v && p.local && (state === 'playing' || state === 'paused') && (mode === 'local' ? !isTouch || usedKeyboard : usedKeyboard);
     for (let r = 0; r < ROWS; r++) {
       for (let c = 0; c < COLS; c++) {
@@ -871,7 +855,7 @@
           cls += ` n${val}`;
           text = String(val);
         }
-        if (val !== undefined && chainKeys.has(`${c},${r}`)) cls += ' chain';
+        if (val !== undefined && val > 0 && inRect(c, r)) cls += ' chain';
         if (r === ROWS - 1) cls += ' top';
         if (showCursor && v.cursor[0] === c && v.cursor[1] === r) cls += ' cursor';
         if (el.className !== cls) el.className = cls;
@@ -880,6 +864,7 @@
     }
 
     if (!v) {
+      renderSelBox(p, null, 0);
       dom.sum.textContent = mode === 'online' && !p.local ? '기다리는 중…' : '';
       dom.combo.textContent = '';
       dom.riseBar.style.width = '0%';
@@ -888,7 +873,8 @@
       dom.wrap.classList.remove('danger');
       return;
     }
-    dom.sum.innerHTML = v.chain.length ? `합 <b>${v.sum}</b> / ${TARGET}` : `합 – / ${TARGET}`;
+    dom.sum.innerHTML = rect ? `합 <b>${v.sum}</b> / ${TARGET}` : `합 – / ${TARGET}`;
+    renderSelBox(p, rect, v.sum);
     dom.combo.textContent = v.combo >= 2 ? `🔥 ${v.combo} 콤보` : '';
     dom.riseBar.style.width = `${v.rise * 100}%`;
     const key = String(v.incoming);
@@ -899,6 +885,27 @@
     }
     dom.incomingBar.style.width = `${v.incomingProgress * 100}%`;
     dom.wrap.classList.toggle('danger', v.danger);
+  }
+
+  /** 선택 사각형 테두리와 합계 표시 */
+  function renderSelBox(p, rect, sum) {
+    const box = p.dom.selBox;
+    if (!rect) {
+      if (box.style.display !== 'none') box.style.display = 'none';
+      return;
+    }
+    const a = p.dom.cells[rect[3]][rect[0]]; // 왼쪽 위
+    const b = p.dom.cells[rect[1]][rect[2]]; // 오른쪽 아래
+    const pad = 3;
+    box.style.display = 'block';
+    box.style.left = `${a.offsetLeft - pad}px`;
+    box.style.top = `${a.offsetTop - pad}px`;
+    box.style.width = `${b.offsetLeft + b.offsetWidth - a.offsetLeft + pad * 2}px`;
+    box.style.height = `${b.offsetTop + b.offsetHeight - a.offsetTop + pad * 2}px`;
+    box.classList.toggle('ok', sum === TARGET);
+    box.classList.toggle('over', sum > TARGET);
+    const text = String(sum);
+    if (p.dom.selSum.textContent !== text) p.dom.selSum.textContent = text;
   }
 
   let lastSent = '';
